@@ -1,77 +1,63 @@
 // src/pages/api/messages.js
 import { createClient } from '@supabase/supabase-js';
 
-// สร้าง Client โดยดึงค่าจาก Environment Variables
-// (เดี๋ยวเราจะไปตั้งค่านี้ใน Vercel ตอน Deploy)
+// สร้าง Client
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  import.meta.env.SUPABASE_URL, // Astro ใช้ import.meta.env
+  import.meta.env.SUPABASE_SERVICE_KEY
 );
 
-// นี่คือ Serverless Function
-export async function handler(req) {
-  
-  // ------------------------------------
-  // จัดการ POST (ส่งข้อความใหม่)
-  // ------------------------------------
-  if (req.method === 'POST') {
-    try {
-      const { name, message } = JSON.parse(req.body);
+// 1. Export GET สำหรับดึงข้อมูล
+export async function GET(context) {
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-      // ตรวจสอบข้อมูลเบื้องต้น
-      if (!name || !message) {
-        return new Response(JSON.stringify({ error: 'Name and message are required.' }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
+    if (error) throw error;
 
-      // ส่งข้อมูลไป Supabase
-      const { data, error } = await supabase
-        .from('messages')
-        .insert([{ name: name, message_text: message }])
-        .select();
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
 
-      if (error) throw error;
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
 
-      return new Response(JSON.stringify(data), {
-        status: 201,
-        headers: { 'Content-Type': 'application/json' },
-      });
+// 2. Export POST สำหรับส่งข้อมูล
+export async function POST(context) {
+  try {
+    // Astro รับ JSON แบบนี้
+    const { name, message } = await context.request.json();
 
-    } catch (err) {
-      return new Response(JSON.stringify({ error: err.message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
+    if (!name || !message) {
+      return new Response(JSON.stringify({ error: 'Name and message are required.' }), {
+        status: 400,
       });
     }
+
+    const { data, error } = await supabase
+      .from('messages')
+      .insert([{ name: name, message_text: message }])
+      .select();
+
+    if (error) throw error;
+
+    return new Response(JSON.stringify(data), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
-
-  // ------------------------------------
-  // จัดการ GET (ดึงข้อความทั้งหมด)
-  // ------------------------------------
-  if (req.method === 'GET') {
-    try {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*') // ดึงทุกคอลัมน์
-        .order('created_at', { ascending: false }); // เรียงจากใหม่ไปเก่า
-
-      if (error) throw error;
-
-      return new Response(JSON.stringify(data), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-    } catch (err) {
-      return new Response(JSON.stringify({ error: err.message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-  }
-
-  // ถ้าเป็น Method อื่นที่ไม่ใช่ GET หรือ POST
-  return new Response('Method Not Allowed', { status: 405 });
 }
